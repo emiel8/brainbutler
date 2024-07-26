@@ -453,6 +453,7 @@ class TestRecordRecordTable:
         db_cursor.execute("SELECT COUNT(*) FROM record_links;")
         row_count = db_cursor.fetchone()[0]
         print(row_count)
+        # TODO fix
         assert row_count == 0
 
         assert len(RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)) == 0
