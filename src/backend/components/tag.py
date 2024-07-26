@@ -1,8 +1,6 @@
 from pydantic import BaseModel, field_validator
 
 class Tag(BaseModel):
-    """
-    """
 
     name: str
 
