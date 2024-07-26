@@ -2,7 +2,9 @@ import typing as t
 
 from ..interface.database_adapter import DatabaseAdapter
 from ..components.record import Record
-from ..components.record import Tag
+from ..components.tag import Tag
+from ..components.node import Node
+from ..components.expression import Expression
 
 
 import os
@@ -31,6 +33,9 @@ class RecordTable:
 
     @staticmethod
     def create_record_table(c: sqlite3.Cursor):
+        """
+        :param c: Database cursor.
+        """
         # Create the table
         create_table_query = '''
         CREATE TABLE record (
@@ -50,7 +55,16 @@ class RecordTable:
         image_uri: str,
         sound_uri: str,
         reference: str,
-        c: sqlite3.Cursor):
+        c: sqlite3.Cursor) -> str:
+        """
+        :param text_uri: Text URI.
+        :param image_uri: Image URI.
+        :param sound_uri: Sound URI.
+        :param reference: Reference of the record.
+        :param c: Database cursor.
+
+        :return: Key of the record.
+        """
         # Generate a UUID for the new record
         record_key = str(uuid.uuid4())
         
@@ -59,23 +73,31 @@ class RecordTable:
         INSERT INTO record (id, text_uri, image_uri, sound_uri, reference)
         VALUES (?, ?, ?, ?, ?);
         '''
-        c.execute(insert_query, (record_key, text_uri, image_uri, sound_uri, reference))
+        c.execute(insert_query, (record_key, text_uri, image_uri, sound_uri, reference,))
         return record_key
 
     @staticmethod
     def fetch_record(
         record_key: str,
-        c: sqlite3.Cursor) -> Record:
+        c: sqlite3.Cursor) -> t.Union[Record, None]:
         """ Fetch the given record from the record table.
 
         :param record_key: Key of the record to fetch.
         :param c: Cursor of the database to use.
 
-        :return: The record.
+        :return: The record when found, None otherwise.
         """
         fetch_record_query = 'SELECT * FROM record WHERE id = ?'
-        c.execute(fetch_record_query, (record_key))
-        return Record(c.fetchone())
+        c.execute(fetch_record_query, (record_key,))
+        record = c.fetchone()
+        if record:
+            return Record(
+                uuid=record[0],
+                text_uri=record[1],
+                image_uri=record[2],
+                sound_uri=record[3],
+                reference=record[4])
+        return None
     
     @staticmethod
     def update_record(
@@ -86,6 +108,14 @@ class RecordTable:
         sound_uri: t.Optional[str] = None,
         reference: t.Optional[str] = None,
         ):
+        """
+        :param record_key: Key of the record to update.
+        :param c: Database cursor.
+        :param text_uri: New text URI.
+        :param image_uri: New image URI.
+        :param sound_uri: New sound URI.
+        :param reference: New reference.
+        """
         # Create the update query with only the fields that are not None
         update_query = '''
         UPDATE record
@@ -95,11 +125,15 @@ class RecordTable:
             reference = COALESCE(?, reference)
         WHERE id = ?;
         '''
-        c.execute(update_query, (text_uri, image_uri, sound_uri, reference, record_key))
+        c.execute(update_query, (text_uri, image_uri, sound_uri, reference, record_key,))
         return
 
     @staticmethod
-    def delete_record(c: sqlite3.Cursor, record_key: str):
+    def delete_record(record_key: str, c: sqlite3.Cursor):
+        """
+        :param record_key: Key of the record to delete.
+        :param c: Database cursor.
+        """
         delete_record_query = 'DELETE FROM record WHERE id = ?;'
         c.execute(delete_record_query, (record_key,))
         return
@@ -108,6 +142,9 @@ class TagTable:
 
     @staticmethod
     def create_tag_table(c: sqlite3.Cursor):
+        """
+        :param c: Database cursor.
+        """
         # Create the table
         create_tag_query = '''
         CREATE TABLE tag (
@@ -120,7 +157,13 @@ class TagTable:
     @staticmethod
     def insert_tag(
         name: str,
-        c: sqlite3.Cursor):
+        c: sqlite3.Cursor) -> str:
+        """
+        :param name: Name of the tag.
+        :param c: Database cursor.
+
+        :return: Name of the tag.
+        """
         insert_query = '''
         INSERT INTO tag (name) VALUES (?);
         '''
@@ -131,13 +174,27 @@ class TagTable:
     def fetch_tag(
         name: str,
         c: sqlite3.Cursor,
-        ) -> Tag:
-        fetch_query = 'SELECT * FROM tag WHERE id = ?'
+        ) -> t.Union[Tag, None]:
+        """
+        :param name: Name of the tag.
+        :param c: Database cursor.
+
+        :return: Tag if found, None otherwise.
+        """
+        fetch_query = 'SELECT * FROM tag WHERE name = ?'
         c.execute(fetch_query, (name,))
-        return Tag(c.fetchone())
+        tag = c.fetchone()
+        if tag:
+            return Tag(name=tag[0])
+        return None
 
     @staticmethod
     def update_tag(old_name: str, new_name: str, c: sqlite3.Cursor):
+        """
+        :param old_name: Old name of the tag.
+        :param new_name: New name of the tag.
+        :param c: Database cursor.
+        """
         update_query = '''
         UPDATE tag
         SET name = ?
@@ -148,6 +205,10 @@ class TagTable:
     
     @staticmethod
     def delete_tag(name: str, c: sqlite3.Cursor):
+        """
+        :param name: Name of the tag to delete.
+        :param c: Database cursor.
+        """
         delete_query = '''
         DELETE FROM tag
         WHERE name = ?;
@@ -160,6 +221,9 @@ class NodeTable:
 
     @staticmethod
     def create_node_table(c: sqlite3.Cursor):
+        """
+        :param c: Database cursor.
+        """
         # Create the table
         create_table_query = '''
         CREATE TABLE node (
@@ -172,14 +236,69 @@ class NodeTable:
     
     @staticmethod
     def insert_node(
-        uri_node: str,
+        node_uri: str,
         c: sqlite3.Cursor) -> str:
+        """
+        :param node_uri: URI of the node to add.
+        :param c: Database cursor.
+
+        :return: Key of the created node.
+        """
         insert_query = '''
         INSERT INTO node (id, uri_node) VALUES (?, ?);
         '''
-        node_id = str(uuid.uuid4())
-        c.execute(insert_query, (node_id, uri_node))
-        return node_id
+        node_key = str(uuid.uuid4())
+        c.execute(insert_query, (node_key, node_uri))
+        return node_key
+    
+    @staticmethod
+    def fetch_node(
+            node_key: str,
+            c: sqlite3.Cursor,
+            ) -> t.Union[Node, None]:
+        """
+        :param node_key: Key of the node to fetch.
+        :param c: Database cursor.
+
+        :return: Node object if node found, None otherwise. 
+        """
+        fetch_query = 'SELECT * FROM node where id = ?;'
+        c.execute(fetch_query, (node_key,))
+        node = c.fetchone()
+        if node:
+            return Node(uuid=node[0], node_uri=node[1])
+        return None
+
+    @staticmethod
+    def update_node(
+            node_key: str,
+            node_uri: t.Optional[str],
+            c: sqlite3.Cursor):
+        """
+        :param node_key: Key of the node to update.
+        :param node_uri: New URI for the node.
+        :param c: Database cursor.
+        """
+        update_query = '''
+        UPDATE node
+        SET uri_node = COALESCE(?, uri_node)
+        WHERE id = ?;
+        '''
+        c.execute(update_query, (node_uri, node_key,))
+        return
+
+    @staticmethod
+    def delete_node(node_key: str, c: sqlite3.Cursor):
+        """
+        :param node_key: Key of the node to delete.
+        :param c: Database cursor.
+        """
+        delete_query = '''
+        DELETE FROM node
+        WHERE id = ?;
+        '''
+        c.execute(delete_query, (node_key,))
+        return
 
 class ExpressionTable:
 
@@ -197,15 +316,73 @@ class ExpressionTable:
     
     @staticmethod
     def insert_expression(
-        uri_expression: str,
+        expression_uri: str,
         c: sqlite3.Cursor
         ) -> str:
+        """
+        :param expression_uri: URI of the expression.
+        :param c: Database cursor.
+
+        :return: Key of the expression.
+        """
         insert_query = '''
         INSERT INTO expression (id, uri_expression) VALUES (?, ?);
         '''
-        expression_id = str(uuid.uuid4())
-        c.execute(insert_query, (expression_id, uri_expression))
-        return expression_id
+        expression_key = str(uuid.uuid4())
+        c.execute(insert_query, (expression_key, expression_uri,))
+        return expression_key
+    
+    @staticmethod
+    def fetch_expression(
+        expression_key: str,
+        c: sqlite3.Cursor
+        ) -> t.Union[Expression, None]:
+        """
+        :param expression_key: Key of the expression to fetch.
+        :param c: Database cursor.
+
+        :return: Expression if found, None otherwise.
+        """
+        fetch_query = 'SELECT * FROM expression WHERE id = ?;'
+        c.execute(fetch_query, (expression_key,))
+        expression = c.fetchone()
+        if expression:
+            return Expression(
+                uuid=expression[0],
+                expression_uri=expression[1])
+        return None
+
+    @staticmethod
+    def update_expression(
+            expression_key: str,
+            c: sqlite3.Cursor,
+            expression_uri: t.Optional[str] = None,
+            ):
+        """
+        :param expression_key: Key of the expression to update.
+        :param expression_uri: The new expression URI.
+        :param c: Database cursor.
+        """
+        update_query = '''
+        UPDATE expression
+        SET uri_expression = COALESCE(?, uri_expression)
+        WHERE id = ?;
+        '''
+        c.execute(update_query, (expression_uri, expression_key))
+        return
+
+    @staticmethod
+    def delete_expression(expression_key: str, c: sqlite3.Cursor):
+        """
+        :param expression_key: Key of the expression to delete.
+        :param c: Database cursor.
+        """
+        delete_query = '''
+        DELETE FROM expression
+        WHERE id = ?;
+        '''
+        c.execute(delete_query, (expression_key,))
+        return
 
 class RecordRecordTable:
 
@@ -213,14 +390,79 @@ class RecordRecordTable:
     def create_record_record_table(c: sqlite3.Cursor):
         create_table_query = '''
         CREATE TABLE record_links (
-            record_id1 TEXT NOT NULL,
-            record_id2 TEXT NOT NULL,
-            PRIMARY KEY (record_id1, record_id2),
-            FOREIGN KEY (record_id1) REFERENCES record (id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY (record_id2) REFERENCES record (id) ON DELETE CASCADE ON UPDATE CASCADE
+            record_key1 TEXT NOT NULL,
+            record_key2 TEXT NOT NULL,
+            PRIMARY KEY (record_key1, record_key2),
+            FOREIGN KEY (record_key1) REFERENCES record (id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (record_key2) REFERENCES record (id) ON DELETE CASCADE ON UPDATE CASCADE
         );
         '''
         c.execute(create_table_query)
+        return
+    
+    @staticmethod
+    def insert_link(
+            record_key1: str,
+            record_key2: str,
+            c: sqlite3.Cursor,
+            ):
+        """
+        :param record_key1: Key of record 1.
+        :param record_key2: Key of record 2.
+        :param c: Database cursor.
+        """
+        insert_query = 'INSERT INTO record_links (record_key1, record_key2) VALUES (?, ?);'
+        c.execute(insert_query, (record_key1, record_key2,))
+        return
+    
+    @staticmethod
+    def fetch_linked_records(
+            record_key: str,
+            c: sqlite3.Cursor,
+            ) -> t.Set[Record]:
+        """
+        :param record_key: Key of the record to get linked records off.
+        :param c: Database cursor.
+
+        :return: Set of records linked to the given record.
+        """
+        fetch_query = '''
+        SELECT record_key1, record_key2
+        FROM record_links
+        WHERE record_key1 = ? OR record_key2 = ?;
+        '''
+        c.execute(fetch_query, (record_key, record_key,))
+        results = c.fetchall()
+        linked_records = set()
+        for record1, record2 in results:
+            if record1 != record_key:
+                record = RecordTable.fetch_record(record_key=record1, c=c)
+                if record:
+                    linked_records.add(record)
+            else:
+                assert record2 != record_key
+                record = RecordTable.fetch_record(record_key=record2, c=c)
+                if record:
+                    linked_records.add(record)
+        return linked_records
+
+    @staticmethod
+    def delete_link(
+            record_key1: str,
+            record_key2: str,
+            c: sqlite3.Cursor,
+            ):
+        """
+        :param record_key1: Key of record 1.
+        :param record_key2: Key of record 2.
+        :param c: Database cursor.
+        """
+        delete_query = '''
+        DELETE FROM record_links
+        WHERE (record_key1 = ? AND record_key2 = ?)
+           OR (record_key1 = ? AND record_key2 = ?);
+        '''
+        c.execute(delete_query, (record_key1, record_key2, record_key2, record_key1,))
         return
 
 class RecordTagTable:
