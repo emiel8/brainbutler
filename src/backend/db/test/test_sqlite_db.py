@@ -24,6 +24,7 @@ def db_connection(tmp_path_factory):
 
 @pytest.fixture(scope="function")
 def db_cursor(db_connection):
+    db_connection.execute('PRAGMA foreign_keys = ON;')  # ENABLE FK constraints!
     return db_connection.cursor()
 
 @pytest.fixture(scope='module')
@@ -386,11 +387,12 @@ class TestRecordRecordTable:
         row_count = db_cursor.fetchone()[0]
         assert row_count == 0
         return
-
+    
     @staticmethod
-    def test_insert_fetch_delete_link(db_cursor, text_uri):
+    def test_insert_link(db_cursor, text_uri):
         # Set up record table
         RecordTable.create_record_table(c=db_cursor)
+        # Create 3 records
         record_key1 = RecordTable.insert_record(
             text_uri=str(text_uri),
             image_uri='',
@@ -415,7 +417,233 @@ class TestRecordRecordTable:
             c=db_cursor,
         )
         record3 = RecordTable.fetch_record(record_key3, db_cursor)
+
+        # Setup record record table
         RecordRecordTable.create_record_record_table(db_cursor)
+        # Link 1 - 2
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key2,
+            c=db_cursor)
+        # Link 1 - 3
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key3,
+            c=db_cursor)
+
+        # Check 2 and 3 linked with 1
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 2
+        assert record2 in records
+        assert record3 in records
+        assert record1 not in records
+
+        # Check 1 linked with 2
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key2, c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+        assert record3 not in records
+        assert record2 not in records
+
+        # Check 1 linked with 3
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key3, c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+        assert record3 not in records
+        assert record2 not in records
+
+        # Link 2 - 3
+        RecordRecordTable.insert_link(record_key1=record_key2, record_key2=record_key3, c=db_cursor)
+        # Check 2 linked with 1 and 3
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key2, c=db_cursor)
+        assert len(records) == 2
+        assert record1 in records
+        assert record2 not in records
+        assert record3 in records
+
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key3, c=db_cursor)
+        assert len(records) == 2
+        assert record1 in records
+        assert record2 in records
+        assert record3 not in records
+        return
+
+    @staticmethod
+    def test_delete_link(db_cursor, text_uri):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 3 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+
+        # Setup record record table
+        RecordRecordTable.create_record_record_table(db_cursor)
+        # Link 1 - 2
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key2,
+            c=db_cursor)
+        # Link 1 - 3
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key3,
+            c=db_cursor)
+
+        # Check 2 and 3 linked with 1
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 2
+        assert record2 in records
+        assert record3 in records
+        assert record1 not in records
+
+        # Unlink 1 and 2
+        RecordRecordTable.delete_link(record_key1=record_key2, record_key2=record_key1, c=db_cursor)
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 1
+        assert record2 not in records
+        assert record1 not in records
+        assert record3 in records
+
+        # Unlink 1 and 3
+        RecordRecordTable.delete_link(record_key1=record_key1, record_key2=record_key3, c=db_cursor)
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 0
+        return
+
+    @staticmethod
+    def test_delete_record_propagation(db_cursor, text_uri):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 3 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+
+        # Setup record record table
+        RecordRecordTable.create_record_record_table(db_cursor)
+        # Link 1 - 2
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key2,
+            c=db_cursor)
+        # Link 1 - 3
+        RecordRecordTable.insert_link(
+            record_key1=record_key1,
+            record_key2=record_key3,
+            c=db_cursor)
+
+        # Check 2 and 3 linked with 1
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 2
+        assert record2 in records
+        assert record3 in records
+        assert record1 not in records
+
+        # Check 1 linked with 2
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key2, c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+        assert record2 not in records
+        assert record3 not in records
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key2, c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+
+        # Remove record 2 from records table
+        RecordTable.delete_record(record_key=record_key2, c=db_cursor)
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 1
+        assert record3 in records
+        assert record2 not in records
+        assert record1 not in records
+
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key2, c=db_cursor)
+        assert len(records) == 0
+
+        # Remove record 3 from records table
+        RecordTable.delete_record(record_key=record_key3, c=db_cursor)
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
+        assert len(records) == 0
+        db_cursor.execute("SELECT COUNT(*) FROM record_links;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, text_uri):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+        # Create record links table
+        RecordRecordTable.create_record_record_table(db_cursor)
+        # Link 1 with 2 and 3
         RecordRecordTable.insert_link(
             record_key1=record_key1,
             record_key2=record_key2,
@@ -432,9 +660,6 @@ class TestRecordRecordTable:
 
         # Check if cascade works
         RecordTable.delete_record(record_key=record_key2, c=db_cursor)
-        print('hell')
-        db_cursor.execute("SELECT * FROM record_links")
-        print(db_cursor.fetchall())
         records = RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)
         assert len(records) == 1
         assert record3 in records
@@ -443,18 +668,6 @@ class TestRecordRecordTable:
 
         # Check if delete link works
         RecordRecordTable.delete_link(record_key1=record_key1, record_key2=record_key3, c=db_cursor)
-        print(record_key1)
-        print(record_key2)
-        print(record_key3)
-        # Check if the table 'record_links' is empty
-        db_cursor.execute("SELECT * FROM record_links")
-        print(db_cursor.fetchall())
-        print('\n\n')
         db_cursor.execute("SELECT COUNT(*) FROM record_links;")
         row_count = db_cursor.fetchone()[0]
-        print(row_count)
-        # TODO fix
         assert row_count == 0
-
-        assert len(RecordRecordTable.fetch_linked_records(record_key=record_key1, c=db_cursor)) == 0
-        
