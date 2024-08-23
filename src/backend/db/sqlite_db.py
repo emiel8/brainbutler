@@ -472,11 +472,11 @@ class RecordTagTable:
         # Create the join table for record and tag
         create_table_query = '''
         CREATE TABLE record_tag (
-            record_id TEXT,
+            record_key TEXT,
             tag_name TEXT,
-            FOREIGN KEY (record_id) REFERENCES record(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (record_key) REFERENCES record(id) ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY (tag_name) REFERENCES tag(name) ON DELETE CASCADE ON UPDATE CASCADE,
-            PRIMARY KEY (record_id, tag_name)
+            PRIMARY KEY (record_key, tag_name)
         );
         '''
         c.execute(create_table_query)
@@ -484,13 +484,77 @@ class RecordTagTable:
     
     @staticmethod
     def insert_link(
-        record_id: str,
+        record_key: str,
         tag_name: str,
         c: sqlite3.Cursor):
+        """
+        :param record_key: Key of the record to link.
+        :param tag_name: Name of the tag to link.
+        :param c: Database cursor.
+        """
         insert_link_query = '''
-        INSERT INTO record_tag (record_id, tag_name) VALUES (?, ?);
+        INSERT INTO record_tag (record_key, tag_name) VALUES (?, ?);
         '''
-        c.execute(insert_link_query, (record_id, tag_name))
+        c.execute(insert_link_query, (record_key, tag_name))
+        return
+
+    @staticmethod
+    def get_linked_tags(
+        record_key: str,
+        c: sqlite3.Cursor) -> t.Set[Tag]:
+        """
+        :param record_key: Key of the record to get the linked tags of.
+        :param c: Database cursor.
+
+        :return: Set of linked tags.
+        """
+        get_tags_query = '''
+        SELECT tag_name
+        FROM record_tag
+        WHERE record_key = ?;
+        '''
+        c.execute(get_tags_query, (record_key,))
+        return set([Tag(name=row[0]) for row in c.fetchall()])
+
+    @staticmethod
+    def get_linked_records(
+        tag_name: str,
+        c: sqlite3.Cursor) -> t.Set[Record]:
+        """
+        :param tag_name: Name of the tag to get the linked records of.
+        :param c: Database cursor.
+
+        :return: Set of records linked to the given Tag name.
+        """
+        get_records_query = '''
+        SELECT record_key
+        FROM record_tag
+        WHERE tag_name = ?;
+        '''
+        c.execute(get_records_query, (tag_name,))
+        record_keys = [row[0] for row in c.fetchall()]
+        records = set()
+        for record_key in record_keys:
+            record = RecordTable.fetch_record(record_key=record_key, c=c)
+            assert record is not None
+            records.add(record)
+        return records
+
+    @staticmethod
+    def delete_link(
+        record_key: str,
+        tag_name: str,
+        c: sqlite3.Cursor):
+        """
+        :param record_key: Record key part of the link to remove.
+        :param tag_name: Tag name part of the link to remove.
+        :param c: Database cursor.
+        """
+        delete_link_query = '''
+        DELETE FROM record_tag
+        WHERE record_key = ? AND tag_name = ?;
+        '''
+        c.execute(delete_link_query, (record_key, tag_name))
         return
 
 class NodeTagTable:

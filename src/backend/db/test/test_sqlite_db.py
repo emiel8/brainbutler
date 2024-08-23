@@ -10,6 +10,7 @@ from backend.db.sqlite_db import (
     NodeTable,
     ExpressionTable,
     RecordRecordTable,
+    RecordTagTable,
 )
 
 
@@ -671,3 +672,234 @@ class TestRecordRecordTable:
         db_cursor.execute("SELECT COUNT(*) FROM record_links;")
         row_count = db_cursor.fetchone()[0]
         assert row_count == 0
+
+class TestRecordTagTable:
+
+    @staticmethod
+    def test_create_record_tag_table(db_cursor):
+        # Check if the table 'record_tag' does not exist yet
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='record_tag';")
+        assert db_cursor.fetchone() is None
+
+        # Create
+        RecordTagTable.create_record_tag_table(db_cursor)
+        # Check if the table 'node' is created
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='record_tag';")
+        assert db_cursor.fetchone() is not None
+        
+        # Check if the table 'node' is empty
+        db_cursor.execute("SELECT COUNT(*) FROM record_tag;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, text_uri):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 4 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+        record_key4 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref4',
+            c=db_cursor,
+        )
+        record4 = RecordTable.fetch_record(record_key4, db_cursor)
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup record tag table
+        RecordTagTable.create_record_tag_table(db_cursor)
+        # Link r1 - t1
+        RecordTagTable.insert_link(
+            record_key=record_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link r1 - t2
+        RecordTagTable.insert_link(
+            record_key=record_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link r2 - t1
+        RecordTagTable.insert_link(
+            record_key=record_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link r3 - t2
+        RecordTagTable.insert_link(
+            record_key=record_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Check tags linked to record1
+        tags = RecordTagTable.get_linked_tags(record_key=record_key1, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 in tags
+        assert len(tags) == 2
+        # Check tags linked to record2
+        tags = RecordTagTable.get_linked_tags(record_key=record_key2, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 not in tags
+        assert len(tags) == 1
+        # Check tags linked to record3
+        tags = RecordTagTable.get_linked_tags(record_key=record_key3, c=db_cursor)
+        assert tag2 in tags
+        assert tag1 not in tags
+        assert len(tags) == 1
+        # Check tags linked to record4
+        tags = RecordTagTable.get_linked_tags(record_key=record_key4, c=db_cursor)
+        assert len(tags) == 0
+
+        # Check records linked to tag1
+        records = RecordTagTable.get_linked_records(tag_name='tag1', c=db_cursor)
+        assert record1 in records
+        assert record2 in records
+        assert len(records) == 2
+        # Check records linked to tag2
+        records = RecordTagTable.get_linked_records(tag_name='tag2', c=db_cursor)
+        assert record1 in records
+        assert record3 in records
+        assert len(records) == 2
+        # Check records linked to tag1
+        records = RecordTagTable.get_linked_records(tag_name='tag3', c=db_cursor)
+        assert len(records) == 0
+
+        # Delete link r1 and t1
+        RecordTagTable.delete_link(record_key=record_key1, tag_name='tag1', c=db_cursor)
+        records = RecordTagTable.get_linked_records(tag_name='tag1', c=db_cursor)
+        assert len(records) == 1
+        assert record2 in records
+        tags = RecordTagTable.get_linked_tags(record_key=record_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag2 in tags
+
+        # Delete link r3 and t2
+        RecordTagTable.delete_link(record_key=record_key3, tag_name='tag2', c=db_cursor)
+        records = RecordTagTable.get_linked_records(tag_name='tag2', c=db_cursor)
+        assert record1 in records
+        assert len(records) == 1
+        tags = RecordTagTable.get_linked_tags(record_key=record_key3, c=db_cursor)
+        assert len(tags) == 0
+        return
+
+    @staticmethod
+    def test_delete_propagation(db_cursor, text_uri):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 4 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+        record_key4 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref4',
+            c=db_cursor,
+        )
+        record4 = RecordTable.fetch_record(record_key4, db_cursor)
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup record tag table
+        RecordTagTable.create_record_tag_table(db_cursor)
+        # Link r1 - t1
+        RecordTagTable.insert_link(
+            record_key=record_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link r1 - t2
+        RecordTagTable.insert_link(
+            record_key=record_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link r2 - t1
+        RecordTagTable.insert_link(
+            record_key=record_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link r3 - t2
+        RecordTagTable.insert_link(
+            record_key=record_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Delete record2 from Record table
+        records = RecordTagTable.get_linked_records(tag_name='tag1', c=db_cursor)
+        assert len(records) == 2
+        assert record1 in records
+        assert record2 in records
+        RecordTable.delete_record(record_key=record_key2, c=db_cursor)
+        records = RecordTagTable.get_linked_records(tag_name='tag1', c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+
+        # Delete tag2 from Tag table
+        tags = RecordTagTable.get_linked_tags(record_key=record_key1, c=db_cursor)
+        assert len(tags) == 2
+        assert tag1 in tags
+        assert tag2 in tags
+        TagTable.delete_tag(name='tag2', c=db_cursor)
+        tags = RecordTagTable.get_linked_tags(record_key=record_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag1 in tags
+        assert tag2 not in tags
+        return

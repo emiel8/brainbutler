@@ -14,3 +14,6 @@ class Tag(BaseModel):
     def name_not_empty(cls, v: str) -> str:
         assert v != ''
         return v
+    
+    def __hash__(self):
+        return hash(self.name)
