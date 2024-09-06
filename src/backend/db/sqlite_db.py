@@ -564,14 +564,89 @@ class NodeTagTable:
         # Create the join table for record and tag
         create_table_query = '''
         CREATE TABLE node_tag (
-            node_id TEXT,
+            node_key TEXT,
             tag_name TEXT,
-            FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (node_key) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY (tag_name) REFERENCES tag(name) ON DELETE CASCADE ON UPDATE CASCADE,
-            PRIMARY KEY (node_id, tag_name)
+            PRIMARY KEY (node_key, tag_name)
         );
         '''
         c.execute(create_table_query)
+        return
+
+    @staticmethod
+    def insert_link(
+        node_key: str,
+        tag_name: str,
+        c: sqlite3.Cursor):
+        """
+        :param node_key: Key of the node to link.
+        :param tag_name: Name of the tag to link.
+        :param c: Database cursor.
+        """
+        insert_link_query = '''
+        INSERT INTO node_tag (node_key, tag_name) VALUES (?, ?);
+        '''
+        c.execute(insert_link_query, (node_key, tag_name))
+        return
+
+    @staticmethod
+    def get_linked_tags(
+        node_key: str,
+        c: sqlite3.Cursor) -> t.Set[Tag]:
+        """
+        :param node_key: Key of the node to get the linked tags of.
+        :param c: Database cursor.
+
+        :return: Set of linked tags.
+        """
+        get_tags_query = '''
+        SELECT tag_name
+        FROM node_tag
+        WHERE node_key = ?;
+        '''
+        c.execute(get_tags_query, (node_key,))
+        return set([Tag(name=row[0]) for row in c.fetchall()])
+
+    @staticmethod
+    def get_linked_nodes(
+        tag_name: str,
+        c: sqlite3.Cursor) -> t.Set[Node]:
+        """
+        :param tag_name: Name of the tag to get the linked nodes of.
+        :param c: Database cursor.
+
+        :return: Set of nodes linked to the given Tag name.
+        """
+        get_nodes_query = '''
+        SELECT node_key
+        FROM node_tag
+        WHERE tag_name = ?;
+        '''
+        c.execute(get_nodes_query, (tag_name,))
+        nodes_keys = [row[0] for row in c.fetchall()]
+        nodes = set()
+        for node_key in nodes_keys:
+            node = NodeTable.fetch_node(node_key=node_key, c=c)
+            assert node is not None
+            nodes.add(node)
+        return nodes
+
+    @staticmethod
+    def delete_link(
+        node_key: str,
+        tag_name: str,
+        c: sqlite3.Cursor):
+        """
+        :param node_key: Node key part of the link to remove.
+        :param tag_name: Tag name part of the link to remove.
+        :param c: Database cursor.
+        """
+        delete_link_query = '''
+        DELETE FROM node_tag
+        WHERE node_key = ? AND tag_name = ?;
+        '''
+        c.execute(delete_link_query, (node_key, tag_name))
         return
 
 class ExpressionTagTable:

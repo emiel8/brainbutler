@@ -11,6 +11,7 @@ from backend.db.sqlite_db import (
     ExpressionTable,
     RecordRecordTable,
     RecordTagTable,
+    NodeTagTable,
 )
 
 
@@ -51,6 +52,14 @@ def node_uri() -> AnyUrl:
 @pytest.fixture(scope='module')
 def node_uri2() -> AnyUrl:
     return AnyUrl('c:/Users/mynode2.json')
+
+@pytest.fixture(scope='module')
+def node_uri3() -> AnyUrl:
+    return AnyUrl('c:/Users/mynode3.json')
+
+@pytest.fixture(scope='module')
+def node_uri4() -> AnyUrl:
+    return AnyUrl('c:/Users/mynode4.json')
 
 @pytest.fixture(scope='module')
 def expression_uri() -> AnyUrl:
@@ -899,6 +908,213 @@ class TestRecordTagTable:
         assert tag2 in tags
         TagTable.delete_tag(name='tag2', c=db_cursor)
         tags = RecordTagTable.get_linked_tags(record_key=record_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag1 in tags
+        assert tag2 not in tags
+        return
+
+class TestNodeTagTable:
+
+    @staticmethod
+    def test_create_node_tag_table(db_cursor):
+        # Check if the table 'node_tag' does not exist yet
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='node_tag';")
+        assert db_cursor.fetchone() is None
+
+        # Create
+        NodeTagTable.create_node_tag_table(db_cursor)
+        # Check if the table 'node_tag' is created
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='node_tag';")
+        assert db_cursor.fetchone() is not None
+        
+        # Check if the table 'node_tag' is empty
+        db_cursor.execute("SELECT COUNT(*) FROM node_tag;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, node_uri, node_uri2, node_uri3, node_uri4):
+        # Set up record table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key=node_key1, c=db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key=node_key2, c=db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key=node_key3, c=db_cursor)
+        node_key4 = NodeTable.insert_node(
+            node_uri=str(node_uri4),
+            c=db_cursor,
+        )
+        node4 = NodeTable.fetch_node(node_key=node_key4, c=db_cursor)
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup node tag table
+        NodeTagTable.create_node_tag_table(db_cursor)
+        # Link n1 - t1
+        NodeTagTable.insert_link(
+            node_key=node_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link n1 - t2
+        NodeTagTable.insert_link(
+            node_key=node_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link n2 - t1
+        NodeTagTable.insert_link(
+            node_key=node_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link n3 - t2
+        NodeTagTable.insert_link(
+            node_key=node_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Check tags linked to node1
+        tags = NodeTagTable.get_linked_tags(node_key=node_key1, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 in tags
+        assert len(tags) == 2
+        # Check tags linked to node2
+        tags = NodeTagTable.get_linked_tags(node_key=node_key2, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 not in tags
+        assert len(tags) == 1
+        # Check tags linked to node3
+        tags = NodeTagTable.get_linked_tags(node_key=node_key3, c=db_cursor)
+        assert tag2 in tags
+        assert tag1 not in tags
+        assert len(tags) == 1
+        # Check tags linked to node4
+        tags = NodeTagTable.get_linked_tags(node_key=node_key4, c=db_cursor)
+        assert len(tags) == 0
+
+        # Check nodes linked to tag1
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag1', c=db_cursor)
+        assert node1 in nodes
+        assert node2 in nodes
+        assert len(nodes) == 2
+        # Check nodes linked to tag2
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag2', c=db_cursor)
+        assert node1 in nodes
+        assert node3 in nodes
+        assert len(nodes) == 2
+        # Check nodes linked to tag3
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag3', c=db_cursor)
+        assert len(nodes) == 0
+
+        # Delete link n1 and t1
+        NodeTagTable.delete_link(node_key=node_key1, tag_name='tag1', c=db_cursor)
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag1', c=db_cursor)
+        assert len(nodes) == 1
+        assert node2 in nodes
+        tags = NodeTagTable.get_linked_tags(node_key=node_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag2 in tags
+
+        # Delete link n3 and t2
+        NodeTagTable.delete_link(node_key=node_key3, tag_name='tag2', c=db_cursor)
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag2', c=db_cursor)
+        assert node1 in nodes
+        assert len(nodes) == 1
+        tags = NodeTagTable.get_linked_tags(node_key=node_key3, c=db_cursor)
+        assert len(tags) == 0
+        return
+
+    @staticmethod
+    def test_delete_propagation(db_cursor, node_uri, node_uri2, node_uri3, node_uri4):
+        # Set up node table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key1, db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key2, db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key3, db_cursor)
+        node_key4 = NodeTable.insert_node(
+            node_uri=str(node_uri4),
+            c=db_cursor,
+        )
+        node4 = NodeTable.fetch_node(node_key4, db_cursor)
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup node tag table
+        NodeTagTable.create_node_tag_table(db_cursor)
+        # Link ,1 - t1
+        NodeTagTable.insert_link(
+            node_key=node_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link n1 - t2
+        NodeTagTable.insert_link(
+            node_key=node_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link n2 - t1
+        NodeTagTable.insert_link(
+            node_key=node_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link n3 - t2
+        NodeTagTable.insert_link(
+            node_key=node_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Delete node2 from Node table
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag1', c=db_cursor)
+        assert len(nodes) == 2
+        assert node1 in nodes
+        assert node2 in nodes
+        NodeTable.delete_node(node_key=node_key2, c=db_cursor)
+        nodes = NodeTagTable.get_linked_nodes(tag_name='tag1', c=db_cursor)
+        assert len(nodes) == 1
+        assert node1 in nodes
+
+        # Delete tag2 from Tag table
+        tags = NodeTagTable.get_linked_tags(node_key=node_key1, c=db_cursor)
+        assert len(tags) == 2
+        assert tag1 in tags
+        assert tag2 in tags
+        TagTable.delete_tag(name='tag2', c=db_cursor)
+        tags = NodeTagTable.get_linked_tags(node_key=node_key1, c=db_cursor)
         assert len(tags) == 1
         assert tag1 in tags
         assert tag2 not in tags

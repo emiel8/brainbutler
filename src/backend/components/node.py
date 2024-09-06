@@ -22,6 +22,9 @@ class Node(BaseModel):
     def parse_node_formula(formula: str) -> t.Dict:
         # Maybe the frontend should just provide the node formula in the json format ?
         raise NotImplementedError
+    
+    def __hash__(self):
+        return hash(self.uuid)
 
 if __name__ == '__main__':
     # Examples of how the node formula jsons will look
