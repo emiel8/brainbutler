@@ -561,7 +561,7 @@ class NodeTagTable:
 
     @staticmethod
     def create_node_tag_table(c: sqlite3.Cursor):
-        # Create the join table for record and tag
+        # Create the join table for node and tag
         create_table_query = '''
         CREATE TABLE node_tag (
             node_key TEXT,
@@ -653,17 +653,92 @@ class ExpressionTagTable:
 
     @staticmethod
     def create_expression_tag_table(c: sqlite3.Cursor):
-        # Create the join table for record and tag
+        # Create the join table for expression and tag
         create_table_query = '''
         CREATE TABLE expression_tag (
-            expression_id TEXT,
+            expression_key TEXT,
             tag_name TEXT,
-            FOREIGN KEY (expression_id) REFERENCES expression(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (expression_key) REFERENCES expression(id) ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY (tag_name) REFERENCES tag(name) ON DELETE CASCADE ON UPDATE CASCADE,
-            PRIMARY KEY (expression_id, tag_name)
+            PRIMARY KEY (expression_key, tag_name)
         );
         '''
         c.execute(create_table_query)
+        return
+    
+    @staticmethod
+    def insert_link(
+        expression_key: str,
+        tag_name: str,
+        c: sqlite3.Cursor):
+        """
+        :param expression_key: Key of the expression to link.
+        :param tag_name: Name of the tag to link.
+        :param c: Database cursor.
+        """
+        insert_link_query = '''
+        INSERT INTO expression_tag (expression_key, tag_name) VALUES (?, ?);
+        '''
+        c.execute(insert_link_query, (expression_key, tag_name))
+        return
+
+    @staticmethod
+    def get_linked_tags(
+        expression_key: str,
+        c: sqlite3.Cursor) -> t.Set[Tag]:
+        """
+        :param expression_key: Key of the expression to get the linked tags of.
+        :param c: Database cursor.
+
+        :return: Set of linked tags.
+        """
+        get_tags_query = '''
+        SELECT tag_name
+        FROM expression_tag
+        WHERE expression_key = ?;
+        '''
+        c.execute(get_tags_query, (expression_key,))
+        return set([Tag(name=row[0]) for row in c.fetchall()])
+
+    @staticmethod
+    def get_linked_expressions(
+        tag_name: str,
+        c: sqlite3.Cursor) -> t.Set[Expression]:
+        """
+        :param tag_name: Name of the tag to get the linked expressions of.
+        :param c: Database cursor.
+
+        :return: Set of expressions linked to the given Tag name.
+        """
+        get_expressions_query = '''
+        SELECT expression_key
+        FROM expression_tag
+        WHERE tag_name = ?;
+        '''
+        c.execute(get_expressions_query, (tag_name,))
+        expressions_keys = [row[0] for row in c.fetchall()]
+        expressions = set()
+        for expression_key in expressions_keys:
+            expression = ExpressionTable.fetch_expression(expression_key=expression_key, c=c)
+            assert expression is not None
+            expressions.add(expression)
+        return expressions
+
+    @staticmethod
+    def delete_link(
+        expression_key: str,
+        tag_name: str,
+        c: sqlite3.Cursor):
+        """
+        :param expression_key: Expression key part of the link to remove.
+        :param tag_name: Tag name part of the link to remove.
+        :param c: Database cursor.
+        """
+        delete_link_query = '''
+        DELETE FROM expression_tag
+        WHERE expression_key = ? AND tag_name = ?;
+        '''
+        c.execute(delete_link_query, (expression_key, tag_name))
         return
 
 class RecordNodeTable:

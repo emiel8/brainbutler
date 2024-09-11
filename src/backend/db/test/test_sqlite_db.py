@@ -12,6 +12,7 @@ from backend.db.sqlite_db import (
     RecordRecordTable,
     RecordTagTable,
     NodeTagTable,
+    ExpressionTagTable,
 )
 
 
@@ -68,6 +69,14 @@ def expression_uri() -> AnyUrl:
 @pytest.fixture(scope='module')
 def expression_uri2() -> AnyUrl:
     return AnyUrl('c:/Users/myexpression2.json')
+
+@pytest.fixture(scope='module')
+def expression_uri3() -> AnyUrl:
+    return AnyUrl('c:/Users/myexpression3.json')
+
+@pytest.fixture(scope='module')
+def expression_uri4() -> AnyUrl:
+    return AnyUrl('c:/Users/myexpression4.json')
 
 
 class TestRecordTable:
@@ -935,7 +944,7 @@ class TestNodeTagTable:
 
     @staticmethod
     def test_insert_fetch_delete_link(db_cursor, node_uri, node_uri2, node_uri3, node_uri4):
-        # Set up record table
+        # Set up node table
         NodeTable.create_node_table(c=db_cursor)
         # Create 4 nodes
         node_key1 = NodeTable.insert_node(
@@ -1115,6 +1124,215 @@ class TestNodeTagTable:
         assert tag2 in tags
         TagTable.delete_tag(name='tag2', c=db_cursor)
         tags = NodeTagTable.get_linked_tags(node_key=node_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag1 in tags
+        assert tag2 not in tags
+        return
+
+
+class TestExpressionTagTable:
+
+    @staticmethod
+    def test_create_expression_tag_table(db_cursor):
+        # Check if the table 'expression_tag' does not exist yet
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='expression_tag';")
+        assert db_cursor.fetchone() is None
+
+        # Create
+        ExpressionTagTable.create_expression_tag_table(db_cursor)
+        # Check if the table 'expression_tag' is created
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='expression_tag';")
+        assert db_cursor.fetchone() is not None
+        
+        # Check if the table 'expression_tag' is empty
+        db_cursor.execute("SELECT COUNT(*) FROM expression_tag;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+    
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, expression_uri, expression_uri2, expression_uri3, expression_uri4):
+        # Set up expression table
+        ExpressionTable.create_expression_table(c=db_cursor)
+        # Create 4 expressions
+        expression_key1 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri),
+            c=db_cursor,
+        )
+        expression1 = ExpressionTable.fetch_expression(expression_key=expression_key1, c=db_cursor)
+        expression_key2 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri2),
+            c=db_cursor,
+        )
+        expression2 = ExpressionTable.fetch_expression(expression_key=expression_key2, c=db_cursor)
+        expression_key3 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri3),
+            c=db_cursor,
+        )
+        expression3 = ExpressionTable.fetch_expression(expression_key=expression_key3, c=db_cursor)
+        expression_key4 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri4),
+            c=db_cursor,
+        )
+        expression4 = ExpressionTable.fetch_expression(expression_key=expression_key4, c=db_cursor)
+        
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup expression tag table
+        ExpressionTagTable.create_expression_tag_table(c=db_cursor)
+        # Link e1 - t1
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link e1 - t2
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link e2 - t1
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link e3 - t2
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Check tags linked to expression1
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key1, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 in tags
+        assert len(tags) == 2
+        # Check tags linked to expression2
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key2, c=db_cursor)
+        assert tag1 in tags
+        assert tag2 not in tags
+        assert len(tags) == 1
+        # Check tags linked to expression3
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key3, c=db_cursor)
+        assert tag2 in tags
+        assert tag1 not in tags
+        assert len(tags) == 1
+        # Check tags linked to expression4
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key4, c=db_cursor)
+        assert len(tags) == 0
+
+        # Check expressions linked to tag1
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag1', c=db_cursor)
+        assert expression1 in expressions
+        assert expression2 in expressions
+        assert len(expressions) == 2
+        # Check expressions linked to tag2
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag2', c=db_cursor)
+        assert expression1 in expressions
+        assert expression3 in expressions
+        assert len(expressions) == 2
+        # Check expressions linked to tag3
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag3', c=db_cursor)
+        assert len(expressions) == 0
+
+        # Delete link e1 and t1
+        ExpressionTagTable.delete_link(expression_key=expression_key1, tag_name='tag1', c=db_cursor)
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag1', c=db_cursor)
+        assert len(expressions) == 1
+        assert expression2 in expressions
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key1, c=db_cursor)
+        assert len(tags) == 1
+        assert tag2 in tags
+
+        # Delete link e3 and t2
+        ExpressionTagTable.delete_link(expression_key=expression_key3, tag_name='tag2', c=db_cursor)
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag2', c=db_cursor)
+        assert expression1 in expressions
+        assert len(expressions) == 1
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key3, c=db_cursor)
+        assert len(tags) == 0
+        return
+
+    @staticmethod
+    def test_delete_propagation(db_cursor, expression_uri, expression_uri2, expression_uri3, expression_uri4):
+        # Set up expression table
+        ExpressionTable.create_expression_table(c=db_cursor)
+        # Create 4 expressions
+        expression_key1 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri),
+            c=db_cursor,
+        )
+        expression1 = ExpressionTable.fetch_expression(expression_key=expression_key1, c=db_cursor)
+        expression_key2 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri2),
+            c=db_cursor,
+        )
+        expression2 = ExpressionTable.fetch_expression(expression_key=expression_key2, c=db_cursor)
+        expression_key3 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri3),
+            c=db_cursor,
+        )
+        expression3 = ExpressionTable.fetch_expression(expression_key=expression_key3, c=db_cursor)
+        expression_key4 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri4),
+            c=db_cursor,
+        )
+        expression4 = ExpressionTable.fetch_expression(expression_key=expression_key4, c=db_cursor)
+        # Set up tag table
+        TagTable.create_tag_table(c=db_cursor)
+        # Create 3 tags
+        TagTable.insert_tag(name='tag1', c=db_cursor)
+        tag1 = TagTable.fetch_tag(name='tag1', c=db_cursor)
+        TagTable.insert_tag(name='tag2', c=db_cursor)
+        tag2 = TagTable.fetch_tag(name='tag2', c=db_cursor)
+        TagTable.insert_tag(name='tag3', c=db_cursor)
+        tag3 = TagTable.fetch_tag(name='tag3', c=db_cursor)
+        # Setup expression tag table
+        ExpressionTagTable.create_expression_tag_table(db_cursor)
+        # Link e1 - t1
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key1,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link e1 - t2
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key1,
+            tag_name='tag2',
+            c=db_cursor)
+        # Link e2 - t1
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key2,
+            tag_name='tag1',
+            c=db_cursor)
+        # Link e3 - t2
+        ExpressionTagTable.insert_link(
+            expression_key=expression_key3,
+            tag_name='tag2',
+            c=db_cursor)
+ 
+        # Delete expression2 from Expression table
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag1', c=db_cursor)
+        assert len(expressions) == 2
+        assert expression1 in expressions
+        assert expression2 in expressions
+        ExpressionTable.delete_expression(expression_key=expression_key2, c=db_cursor)
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name='tag1', c=db_cursor)
+        assert len(expressions) == 1
+        assert expression1 in expressions
+
+        # Delete tag2 from Tag table
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key1, c=db_cursor)
+        assert len(tags) == 2
+        assert tag1 in tags
+        assert tag2 in tags
+        TagTable.delete_tag(name='tag2', c=db_cursor)
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key1, c=db_cursor)
         assert len(tags) == 1
         assert tag1 in tags
         assert tag2 not in tags

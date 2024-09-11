@@ -11,6 +11,9 @@ class Expression(BaseModel):
         if not str(v).endswith('.json'):
             raise ValueError('The expression URI should point to a json file!')
         return v
+    
+    def __hash__(self):
+        return hash(self.uuid)
 
 if __name__ == '__main__':
     # Examples of how the expressions formulas json will look
