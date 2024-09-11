@@ -846,14 +846,95 @@ class NodeExpressionTable:
         # Create the join table for record and tag
         create_table_query = '''
         CREATE TABLE node_expression (
-            node_id TEXT,
-            expression_id TEXT,
-            FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY (expression_id) REFERENCES expression(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            PRIMARY KEY (node_id, expression_id)
+            node_key TEXT,
+            expression_key TEXT,
+            FOREIGN KEY (node_key) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (expression_key) REFERENCES expression(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            PRIMARY KEY (node_key, expression_key)
         );
         '''
         c.execute(create_table_query)
+        return
+    
+    @staticmethod
+    def insert_link(
+        node_key: str,
+        expression_key: str,
+        c: sqlite3.Cursor):
+        """
+        :param node_key: Name of the node to link.
+        :param expression_key: Key of the expression to link.
+        :param c: Database cursor.
+        """
+        insert_link_query = '''
+        INSERT INTO node_expression (node_key, expression_key) VALUES (?, ?);
+        '''
+        c.execute(insert_link_query, (node_key, expression_key))
+        return
+
+    @staticmethod
+    def get_linked_nodes(
+        expression_key: str,
+        c: sqlite3.Cursor) -> t.Set[Node]:
+        """
+        :param expression_key: Key of the expression to get the linked nodes of.
+        :param c: Database cursor.
+
+        :return: Set of linked Nodes.
+        """
+        get_nodes_query = '''
+        SELECT node_key
+        FROM node_expression
+        WHERE expression_key = ?;
+        '''
+        c.execute(get_nodes_query, (expression_key,))
+        node_keys = [row[0] for row in c.fetchall()]
+        nodes = set()
+        for node_key in node_keys:
+            node = NodeTable.fetch_node(node_key=node_key, c=c)
+            assert node is not None
+            nodes.add(node)
+        return nodes
+
+    @staticmethod
+    def get_linked_expressions(
+        node_key: str,
+        c: sqlite3.Cursor) -> t.Set[Expression]:
+        """
+        :param node_key: Key of the node to get the linked expressions of.
+        :param c: Database cursor.
+
+        :return: Set of expressions linked to the given node key.
+        """
+        get_expressions_query = '''
+        SELECT expression_key
+        FROM node_expression
+        WHERE node_key = ?;
+        '''
+        c.execute(get_expressions_query, (node_key,))
+        expression_keys = [row[0] for row in c.fetchall()]
+        expressions = set()
+        for expression_key in expression_keys:
+            expression = ExpressionTable.fetch_expression(expression_key=expression_key, c=c)
+            assert expression is not None
+            expressions.add(expression)
+        return expressions
+
+    @staticmethod
+    def delete_link(
+        node_key: str,
+        expression_key: str,
+        c: sqlite3.Cursor):
+        """
+        :param node_key: Node key part of the link to remove.
+        :param expression_key: Expression key part of the link to remove.
+        :param c: Database cursor.
+        """
+        delete_link_query = '''
+        DELETE FROM node_expression
+        WHERE expression_key = ? AND node_key = ?;
+        '''
+        c.execute(delete_link_query, (expression_key, node_key))
         return
 
 

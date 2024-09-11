@@ -14,6 +14,7 @@ from backend.db.sqlite_db import (
     NodeTagTable,
     ExpressionTagTable,
     RecordNodeTable,
+    NodeExpressionTable
 )
 
 
@@ -1586,4 +1587,230 @@ class TestRecordNodeTable:
         assert len(nodes) == 1
         assert node1 in nodes
         assert node2 not in nodes
+        return
+
+class TestNodeExpressionTable:
+
+    @staticmethod
+    def test_create_node_expression_table(db_cursor):
+        # Check if the table 'node_expression' does not exist yet
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='node_expression';")
+        assert db_cursor.fetchone() is None
+
+        # Create
+        NodeExpressionTable.create_node_expression_table(db_cursor)
+        # Check if the table 'node_expression' is created
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='node_expression';")
+        assert db_cursor.fetchone() is not None
+        
+        # Check if the table 'node_expression' is empty
+        db_cursor.execute("SELECT COUNT(*) FROM node_expression;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+    
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, node_uri, node_uri2, node_uri3, node_uri4, expression_uri, expression_uri2, expression_uri3):
+        # Set up node table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key1, db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key2, db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key3, db_cursor)
+        node_key4 = NodeTable.insert_node(
+            node_uri=str(node_uri4),
+            c=db_cursor,
+        )
+        node4 = NodeTable.fetch_node(node_key4, db_cursor)
+        # Set up expression table
+        ExpressionTable.create_expression_table(c=db_cursor)
+        # Create 3 expressions
+        expression_key1 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri),
+            c=db_cursor,
+        )
+        expression1 = ExpressionTable.fetch_expression(expression_key=expression_key1, c=db_cursor)
+        expression_key2 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri2),
+            c=db_cursor,
+        )
+        expression2 = ExpressionTable.fetch_expression(expression_key=expression_key2, c=db_cursor)
+        expression_key3 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri3),
+            c=db_cursor,
+        )
+        expression3 = ExpressionTable.fetch_expression(expression_key=expression_key3, c=db_cursor)
+        # Setup node expression table
+        NodeExpressionTable.create_node_expression_table(db_cursor)
+        # Link n1 - e1
+        NodeExpressionTable.insert_link(
+            node_key=node_key1,
+            expression_key=expression_key1,
+            c=db_cursor)
+        # Link n1 - e2
+        NodeExpressionTable.insert_link(
+            node_key=node_key1,
+            expression_key=expression_key2,
+            c=db_cursor)
+        # Link n2 - e1
+        NodeExpressionTable.insert_link(
+            node_key=node_key2,
+            expression_key=expression_key1,
+            c=db_cursor)
+        # Link n3 - e2
+        NodeExpressionTable.insert_link(
+            node_key=node_key3,
+            expression_key=expression_key2,
+            c=db_cursor)
+ 
+        # Check expressions linked to node1
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key1, c=db_cursor)
+        assert expression1 in expressions
+        assert expression2 in expressions
+        assert len(expressions) == 2
+        # Check expressions linked to node2
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key2, c=db_cursor)
+        assert expression1 in expressions
+        assert expression2 not in expressions
+        assert len(expressions) == 1
+        # Check expressions linked to node3
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key3, c=db_cursor)
+        assert expression2 in expressions
+        assert expression1 not in expressions
+        assert len(expressions) == 1
+        # Check expressions linked to node4
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key4, c=db_cursor)
+        assert len(expressions) == 0
+
+        # Check nodes linked to expression1
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key1, c=db_cursor)
+        assert node1 in nodes
+        assert node2 in nodes
+        assert len(nodes) == 2
+        # Check nodes linked to expression2
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key2, c=db_cursor)
+        assert node1 in nodes
+        assert node3 in nodes
+        assert len(nodes) == 2
+        # Check nodes linked to expression3
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key3, c=db_cursor)
+        assert len(nodes) == 0
+
+        # Delete link n1 and e1
+        NodeExpressionTable.delete_link(node_key=node_key1, expression_key=expression_key1, c=db_cursor)
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key1, c=db_cursor)
+        assert len(nodes) == 1
+        assert node2 in nodes
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key1, c=db_cursor)
+        assert len(expressions) == 1
+        assert expression2 in expressions
+
+        # Delete link n3 and e2
+        NodeExpressionTable.delete_link(node_key=node_key3, expression_key=expression_key2, c=db_cursor)
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key2, c=db_cursor)
+        assert node1 in nodes
+        assert len(nodes) == 1
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key3, c=db_cursor)
+        assert len(expressions) == 0
+        return
+
+    @staticmethod
+    def test_delete_propagation(db_cursor, node_uri, node_uri2, node_uri3, node_uri4, expression_uri, expression_uri2, expression_uri3):
+        
+                # Set up node table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key1, db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key2, db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key3, db_cursor)
+        node_key4 = NodeTable.insert_node(
+            node_uri=str(node_uri4),
+            c=db_cursor,
+        )
+        node4 = NodeTable.fetch_node(node_key4, db_cursor)
+        # Set up expression table
+        ExpressionTable.create_expression_table(c=db_cursor)
+        # Create 3 expressions
+        expression_key1 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri),
+            c=db_cursor,
+        )
+        expression1 = ExpressionTable.fetch_expression(expression_key=expression_key1, c=db_cursor)
+        expression_key2 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri2),
+            c=db_cursor,
+        )
+        expression2 = ExpressionTable.fetch_expression(expression_key=expression_key2, c=db_cursor)
+        expression_key3 = ExpressionTable.insert_expression(
+            expression_uri=str(expression_uri3),
+            c=db_cursor,
+        )
+        expression3 = ExpressionTable.fetch_expression(expression_key=expression_key3, c=db_cursor)
+        # Setup node expression table
+        NodeExpressionTable.create_node_expression_table(db_cursor)
+        # Link n1 - e1
+        NodeExpressionTable.insert_link(
+            node_key=node_key1,
+            expression_key=expression_key1,
+            c=db_cursor)
+        # Link n1 - e2
+        NodeExpressionTable.insert_link(
+            node_key=node_key1,
+            expression_key=expression_key2,
+            c=db_cursor)
+        # Link n2 - e1
+        NodeExpressionTable.insert_link(
+            node_key=node_key2,
+            expression_key=expression_key1,
+            c=db_cursor)
+        # Link n3 - e2
+        NodeExpressionTable.insert_link(
+            node_key=node_key3,
+            expression_key=expression_key2,
+            c=db_cursor)
+
+        # Delete node2 from Node table
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key1, c=db_cursor)
+        assert len(nodes) == 2
+        assert node1 in nodes
+        assert node2 in nodes
+        NodeTable.delete_node(node_key=node_key2, c=db_cursor)
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key1, c=db_cursor)
+        assert len(nodes) == 1
+        assert node1 in nodes
+
+        # Delete expression2 from Expression table
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key1, c=db_cursor)
+        assert len(expressions) == 2
+        assert expression1 in expressions
+        assert expression2 in expressions
+        ExpressionTable.delete_expression(expression_key=expression_key2, c=db_cursor)
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key1, c=db_cursor)
+        assert len(expressions) == 1
+        assert expression1 in expressions
+        assert expression2 not in expressions
         return
