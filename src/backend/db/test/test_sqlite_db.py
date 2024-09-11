@@ -13,6 +13,7 @@ from backend.db.sqlite_db import (
     RecordTagTable,
     NodeTagTable,
     ExpressionTagTable,
+    RecordNodeTable,
 )
 
 
@@ -1336,4 +1337,253 @@ class TestExpressionTagTable:
         assert len(tags) == 1
         assert tag1 in tags
         assert tag2 not in tags
+        return
+
+class TestRecordNodeTable:
+
+    @staticmethod
+    def test_create_record_node_table(db_cursor):
+        # Check if the table 'record_node' does not exist yet
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='record_node';")
+        assert db_cursor.fetchone() is None
+
+        # Create
+        RecordNodeTable.create_record_node_table(db_cursor)
+        # Check if the table 'record_node' is created
+        db_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='record_node';")
+        assert db_cursor.fetchone() is not None
+        
+        # Check if the table 'record_node' is empty
+        db_cursor.execute("SELECT COUNT(*) FROM record_node;")
+        row_count = db_cursor.fetchone()[0]
+        assert row_count == 0
+        return
+
+    @staticmethod
+    def test_insert_fetch_delete_link(db_cursor, text_uri, node_uri, node_uri2, node_uri3, node_uri4):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 4 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+        record_key4 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref4',
+            c=db_cursor,
+        )
+        record4 = RecordTable.fetch_record(record_key4, db_cursor)
+        # Set up node table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key1, db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key2, db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key3, db_cursor)
+        # Setup record node table
+        RecordNodeTable.create_record_node_table(db_cursor)
+        # Link r1 - n1
+        RecordNodeTable.insert_link(
+            record_key=record_key1,
+            node_key=node_key1,
+            c=db_cursor)
+        # Link r1 - n2
+        RecordNodeTable.insert_link(
+            record_key=record_key1,
+            node_key=node_key2,
+            c=db_cursor)
+        # Link r2 - n1
+        RecordNodeTable.insert_link(
+            record_key=record_key2,
+            node_key=node_key1,
+            c=db_cursor)
+        # Link r3 - n2
+        RecordNodeTable.insert_link(
+            record_key=record_key3,
+            node_key=node_key2,
+            c=db_cursor)
+ 
+        # Check nodes linked to record1
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key1, c=db_cursor)
+        assert node1 in nodes
+        assert node2 in nodes
+        assert len(nodes) == 2
+        # Check nodes linked to record2
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key2, c=db_cursor)
+        assert node1 in nodes
+        assert node2 not in nodes
+        assert len(nodes) == 1
+        # Check nodes linked to record3
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key3, c=db_cursor)
+        assert node2 in nodes
+        assert node1 not in nodes
+        assert len(nodes) == 1
+        # Check nodes linked to record4
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key4, c=db_cursor)
+        assert len(nodes) == 0
+
+        # Check records linked to node1
+        records = RecordNodeTable.get_linked_records(node_key=node_key1, c=db_cursor)
+        assert record1 in records
+        assert record2 in records
+        assert len(records) == 2
+        # Check records linked to node2
+        records = RecordNodeTable.get_linked_records(node_key=node_key2, c=db_cursor)
+        assert record1 in records
+        assert record3 in records
+        assert len(records) == 2
+        # Check records linked to node3
+        records = RecordNodeTable.get_linked_records(node_key=node_key3, c=db_cursor)
+        assert len(records) == 0
+
+        # Delete link r1 and n1
+        RecordNodeTable.delete_link(record_key=record_key1, node_key=node_key1, c=db_cursor)
+        records = RecordNodeTable.get_linked_records(node_key=node_key1, c=db_cursor)
+        assert len(records) == 1
+        assert record2 in records
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key1, c=db_cursor)
+        assert len(nodes) == 1
+        assert node2 in nodes
+
+        # Delete link r3 and n2
+        RecordNodeTable.delete_link(record_key=record_key3, node_key=node_key2, c=db_cursor)
+        records = RecordNodeTable.get_linked_records(node_key=node_key2, c=db_cursor)
+        assert record1 in records
+        assert len(records) == 1
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key3, c=db_cursor)
+        assert len(nodes) == 0
+        return
+
+    @staticmethod
+    def test_delete_propagation(db_cursor, text_uri, node_uri, node_uri2, node_uri3, node_uri4):
+        # Set up record table
+        RecordTable.create_record_table(c=db_cursor)
+        # Create 4 records
+        record_key1 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref1',
+            c=db_cursor,
+        )
+        record1 = RecordTable.fetch_record(record_key1, db_cursor)
+        record_key2 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref2',
+            c=db_cursor,
+        )
+        record2 = RecordTable.fetch_record(record_key2, db_cursor)
+        record_key3 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref3',
+            c=db_cursor,
+        )
+        record3 = RecordTable.fetch_record(record_key3, db_cursor)
+        record_key4 = RecordTable.insert_record(
+            text_uri=str(text_uri),
+            image_uri='',
+            sound_uri='',
+            reference='ref4',
+            c=db_cursor,
+        )
+        record4 = RecordTable.fetch_record(record_key4, db_cursor)
+        # Set up node table
+        NodeTable.create_node_table(c=db_cursor)
+        # Create 4 nodes
+        node_key1 = NodeTable.insert_node(
+            node_uri=str(node_uri),
+            c=db_cursor,
+        )
+        node1 = NodeTable.fetch_node(node_key1, db_cursor)
+        node_key2 = NodeTable.insert_node(
+            node_uri=str(node_uri2),
+            c=db_cursor,
+        )
+        node2 = NodeTable.fetch_node(node_key2, db_cursor)
+        node_key3 = NodeTable.insert_node(
+            node_uri=str(node_uri3),
+            c=db_cursor,
+        )
+        node3 = NodeTable.fetch_node(node_key3, db_cursor)
+        # Setup record node table
+        RecordNodeTable.create_record_node_table(db_cursor)
+        # Link r1 - n1
+        RecordNodeTable.insert_link(
+            record_key=record_key1,
+            node_key=node_key1,
+            c=db_cursor)
+        # Link r1 - n2
+        RecordNodeTable.insert_link(
+            record_key=record_key1,
+            node_key=node_key2,
+            c=db_cursor)
+        # Link r2 - n1
+        RecordNodeTable.insert_link(
+            record_key=record_key2,
+            node_key=node_key1,
+            c=db_cursor)
+        # Link r3 - n2
+        RecordNodeTable.insert_link(
+            record_key=record_key3,
+            node_key=node_key2,
+            c=db_cursor)
+
+        # Delete record2 from Record table
+        records = RecordNodeTable.get_linked_records(node_key=node_key1, c=db_cursor)
+        assert len(records) == 2
+        assert record1 in records
+        assert record2 in records
+        RecordTable.delete_record(record_key=record_key2, c=db_cursor)
+        records = RecordNodeTable.get_linked_records(node_key=node_key1, c=db_cursor)
+        assert len(records) == 1
+        assert record1 in records
+
+        # Delete node2 from Node table
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key1, c=db_cursor)
+        assert len(nodes) == 2
+        assert node1 in nodes
+        assert node2 in nodes
+        NodeTable.delete_node(node_key=node_key2, c=db_cursor)
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key1, c=db_cursor)
+        assert len(nodes) == 1
+        assert node1 in nodes
+        assert node2 not in nodes
         return

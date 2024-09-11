@@ -748,14 +748,95 @@ class RecordNodeTable:
         # Create the join table for record and tag
         create_table_query = '''
         CREATE TABLE record_node (
-            record_id TEXT,
-            node_id TEXT,
-            FOREIGN KEY (record_id) REFERENCES record(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            PRIMARY KEY (record_id, node_id)
+            record_key TEXT,
+            node_key TEXT,
+            FOREIGN KEY (record_key) REFERENCES record(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (node_key) REFERENCES node(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            PRIMARY KEY (record_key, node_key)
         );
         '''
         c.execute(create_table_query)
+        return
+    
+    @staticmethod
+    def insert_link(
+        record_key: str,
+        node_key: str,
+        c: sqlite3.Cursor):
+        """
+        :param record_key: Key of the record to link.
+        :param node_key: Name of the node to link.
+        :param c: Database cursor.
+        """
+        insert_link_query = '''
+        INSERT INTO record_node (record_key, node_key) VALUES (?, ?);
+        '''
+        c.execute(insert_link_query, (record_key, node_key))
+        return
+
+    @staticmethod
+    def get_linked_nodes(
+        record_key: str,
+        c: sqlite3.Cursor) -> t.Set[Node]:
+        """
+        :param record_key: Key of the record to get the linked nodes of.
+        :param c: Database cursor.
+
+        :return: Set of linked nodes.
+        """
+        get_nodes_query = '''
+        SELECT node_key
+        FROM record_node
+        WHERE record_key = ?;
+        '''
+        c.execute(get_nodes_query, (record_key,))
+        node_keys = [row[0] for row in c.fetchall()]
+        nodes = set()
+        for node_key in node_keys:
+            node = NodeTable.fetch_node(node_key=node_key, c=c)
+            assert node is not None
+            nodes.add(node)
+        return nodes
+
+    @staticmethod
+    def get_linked_records(
+        node_key: str,
+        c: sqlite3.Cursor) -> t.Set[Record]:
+        """
+        :param node_key: Key of the node to get the linked records of.
+        :param c: Database cursor.
+
+        :return: Set of records linked to the given node key.
+        """
+        get_records_query = '''
+        SELECT record_key
+        FROM record_node
+        WHERE node_key = ?;
+        '''
+        c.execute(get_records_query, (node_key,))
+        record_keys = [row[0] for row in c.fetchall()]
+        records = set()
+        for record_key in record_keys:
+            record = RecordTable.fetch_record(record_key=record_key, c=c)
+            assert record is not None
+            records.add(record)
+        return records
+
+    @staticmethod
+    def delete_link(
+        record_key: str,
+        node_key: str,
+        c: sqlite3.Cursor):
+        """
+        :param record_key: Record key part of the link to remove.
+        :param node_key: Node key part of the link to remove.
+        :param c: Database cursor.
+        """
+        delete_link_query = '''
+        DELETE FROM record_node
+        WHERE record_key = ? AND node_key = ?;
+        '''
+        c.execute(delete_link_query, (record_key, node_key))
         return
 
 class NodeExpressionTable:
