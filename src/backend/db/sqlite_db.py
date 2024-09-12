@@ -67,7 +67,7 @@ class RecordTable:
         """
         # Generate a UUID for the new record
         record_key = str(uuid.uuid4())
-        
+
         # Insert the record into the table
         insert_query = '''
         INSERT INTO record (id, text_uri, image_uri, sound_uri, reference)
@@ -941,16 +941,27 @@ class NodeExpressionTable:
 
 class SQLiteDatabase(DatabaseAdapter):
 
-    @staticmethod
-    def initialize_database(fpath_db: str, overwrite: bool = False):
+    def __init__(self, fpath_db: str, overwrite: bool = False) -> None:
+        """ Initialize SQLite database.
+
+        :param fpath_db: Filepath where the sqlite database will be stored.
+        :param overwrite: If True, overwrite when database at given path already exists. Otherwise do nothing.
+        """
+        super().__init__()
+        self.fpath_db = fpath_db
+        self.initialize_database(overwrite=overwrite)
+        return
+
+    def initialize_database(self, overwrite: bool = False):
         """ Initialize the SQLite Database
 
         :param fpath_db: Filepath where the sqlite database will be stored.
         :param overwrite: If True, overwrite when database at given path already exists. Otherwise do nothing.
         """
-        if os.path.isfile(fpath_db) and not overwrite:
+        if os.path.isfile(self.fpath_db) and not overwrite:
             return
-        conn = sqlite3.connect(fpath_db)
+        conn = sqlite3.connect(self.fpath_db)
+        conn.execute('PRAGMA foreign_keys = ON;')  # ENABLE FK constraints!
         c = conn.cursor()
 
         # Create entity tables
@@ -967,6 +978,289 @@ class SQLiteDatabase(DatabaseAdapter):
         NodeTagTable.create_node_tag_table(c=c)
         ExpressionTagTable.create_expression_tag_table(c=c)
 
+        conn.commit()
+        conn.close()
+        return
+    
+    def get_connection(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.fpath_db)
+    
+    def get_cursor(self) -> sqlite3.Cursor:
+        return self.get_connection().cursor()
+    
+    def insert_record(
+            self,
+            text_uri: str,
+            image_uri: str,
+            sound_uri: str,
+            reference: str,
+    ) -> str:
+        conn = self.get_connection()
+        c = conn.cursor()
+        record_key = RecordTable.insert_record(
+            text_uri=text_uri,
+            image_uri=image_uri,
+            sound_uri=sound_uri,
+            reference=reference,
+            c=c
+        )
+        conn.commit()
+        conn.close()
+        return record_key
+    
+    def insert_tag(self, tag_name: str) -> str:
+        conn = self.get_connection()
+        c = conn.cursor()
+        tag_name = TagTable.insert_tag(name=tag_name, c=c)
+        conn.commit()
+        conn.close()
+        return tag_name
+    
+    def insert_node(self, node_uri: str) -> str:
+        conn = self.get_connection()
+        c = conn.cursor()
+        node_key = NodeTable.insert_node(node_uri=node_uri, c=c)
+        conn.commit()
+        conn.close()
+        return node_key
+    
+    def insert_expression(self, expression_uri: str) -> str:
+        conn = self.get_connection()
+        c = conn.cursor()
+        expression_key = ExpressionTable.insert_expression(expression_uri=expression_uri, c=c)
+        conn.commit()
+        conn.close()
+        return expression_key
+    
+    def link_record_and_record(self, record_key1: str, record_key2: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordRecordTable.insert_link(record_key1=record_key1, record_key2=record_key2, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def link_record_and_tag(self, record_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordTagTable.insert_link(record_key=record_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def link_record_and_node(self, record_key: str, node_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordNodeTable.insert_link(record_key=record_key, node_key=node_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def link_node_and_expression(self, node_key: str, expression_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        NodeExpressionTable.insert_link(node_key=node_key, expression_key=expression_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def link_node_and_tag(self, node_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        NodeTagTable.insert_link(node_key=node_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def link_expression_and_tag(self, expression_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        ExpressionTagTable.insert_link(expression_key=expression_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+
+    def unlink_record_and_record(self, record_key1: str, record_key2: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordRecordTable.delete_link(record_key1=record_key1, record_key2=record_key2, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def unlink_record_and_tag(self, record_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordTagTable.delete_link(record_key=record_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def unlink_record_and_node(self, record_key: str, node_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordNodeTable.delete_link(record_key=record_key, node_key=node_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def unlink_node_and_expression(self, node_key: str, expression_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        NodeExpressionTable.delete_link(node_key=node_key, expression_key=expression_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def unlink_node_and_tag(self, node_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        NodeTagTable.delete_link(node_key=node_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def unlink_expression_and_tag(self, expression_key: str, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        ExpressionTagTable.delete_link(expression_key=expression_key, tag_name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def fetch_record(self, key: str) -> t.Union[Record, None]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        record = RecordTable.fetch_record(record_key=key, c=c)
+        conn.close()
+        return record
+    
+    def fetch_tag(self, key: str) -> t.Union[Tag, None]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        tag = TagTable.fetch_tag(name=key, c=c)
+        conn.close()
+        return tag
+    
+    def fetch_node(self, key: str) -> t.Union[Node, None]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        node = NodeTable.fetch_node(node_key=key, c=c)
+        conn.close()
+        return node
+    
+    def fetch_expression(self, key:str) -> t.Union[Expression, None]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        expression = ExpressionTable.fetch_expression(expression_key=key)
+        conn.close()
+        return expression
+    
+    def fetch_tags_of_record(self, record_key: str) -> t.Set[Tag]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        tags = RecordTagTable.get_linked_tags(record_key=record_key, c=c)
+        conn.close()
+        return tags
+    
+    def fetch_records_of_tag(self, tag_key: str) -> t.Set[Record]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        records = RecordTagTable.get_linked_records(tag_name=tag_key, c=c)
+        conn.close()
+        return records
+    
+    def fetch_tags_of_node(self, node_key: str) -> t.Set[Tag]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        tags = NodeTagTable.get_linked_tags(node_key=node_key, c=c)
+        conn.close()
+        return tags
+
+    def fetch_nodes_of_tag(self, tag_key: str) -> t.Set[Node]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        nodes = NodeTagTable.get_linked_nodes(tag_name=tag_key, c=c)
+        conn.close()
+        return nodes
+    
+    def fetch_tags_of_expression(self, expression_key: str) -> t.Set[Tag]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        tags = ExpressionTagTable.get_linked_tags(expression_key=expression_key, c=c)
+        conn.close()
+        return tags
+    
+    def fetch_expressions_of_tag(self, tag_key: str) -> t.Set[Expression]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        expressions = ExpressionTagTable.get_linked_expressions(tag_name=tag_key, c=c)
+        conn.close()
+        return expressions
+    
+    def fetch_linked_records_of_record(self, record_key: str) -> t.Set[Record]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        records = RecordRecordTable.fetch_linked_records(record_key=record_key, c=c)
+        conn.close()
+        return records
+    
+    def fetch_nodes_of_record(self, record_key: str) -> t.Set[Node]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        nodes = RecordNodeTable.get_linked_nodes(record_key=record_key, c=c)
+        conn.close()
+        return nodes
+    
+    def fetch_records_of_node(self, node_key: str) -> t.Set[Record]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        records = RecordNodeTable.get_linked_records(node_key=node_key, c=c)
+        conn.close()
+        return records
+    
+    def fetch_nodes_of_expression(self, expression_key: str) -> t.Set[Node]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        nodes = NodeExpressionTable.get_linked_nodes(expression_key=expression_key, c=c)
+        conn.close()
+        return nodes
+    
+    def fetch_expressions_of_node(self, node_key: str) -> t.Set[Expression]:
+        conn = self.get_connection()
+        c = conn.cursor()
+        expressions = NodeExpressionTable.get_linked_expressions(node_key=node_key, c=c)
+        conn.close()
+        return expressions
+    
+    def delete_record(self, record_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        RecordTable.delete_record(record_key=record_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def delete_tag(self, tag_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        TagTable.delete_tag(name=tag_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def delete_node(self, node_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        NodeTable.delete_node(node_key=node_key, c=c)
+        conn.commit()
+        conn.close()
+        return
+    
+    def delete_expression(self, expression_key: str) -> None:
+        conn = self.get_connection()
+        c = conn.cursor()
+        ExpressionTable.delete_expression(expression_key=expression_key, c=c)
         conn.commit()
         conn.close()
         return

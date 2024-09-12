@@ -14,7 +14,8 @@ from backend.db.sqlite_db import (
     NodeTagTable,
     ExpressionTagTable,
     RecordNodeTable,
-    NodeExpressionTable
+    NodeExpressionTable,
+    SQLiteDatabase,
 )
 
 
@@ -1814,3 +1815,13 @@ class TestNodeExpressionTable:
         assert expression1 in expressions
         assert expression2 not in expressions
         return
+
+class TestSQLiteDatabase:
+
+    @staticmethod
+    def test(tmp_path_factory):
+        fpath_db: pathlib.Path = tmp_path_factory.mktemp("database") / "test.db"
+        db = SQLiteDatabase(fpath_db=fpath_db, overwrite=True)
+        tag = db.insert_tag(tag_name='tag1')
+        Tag = db.fetch_tag(key=tag)
+        
